@@ -1,0 +1,147 @@
+---
+title: "Final Project Report by Katie Aman"
+output: html_document
+date: "2023-12-01"
+---
+
+## Katie's RMarkdown Report (HTML)
+
+This RMarkdown is going to be a report on sleep and health data that came from Kaggle. It is a small file that is comprised of 374 different people (in rows). Please run the Dockerfile and readme as well for this project. My report will seek to outline the different things I found in this small data set. I had variables on the following data: person id, age, gender (m/f), occupation, sleep duration (hours), quality of sleep (on a 1-10 scale), physical activity level (minutes/day/), stress level (on a 1-10 scale), BMI category (underweight, normal, overweight), blood pressure (systolic/diastolic), heart rate (bpm), daily steps (number of steps taken daily), and sleep disorder (none, insomnia, sleep apnea). Although it's a small data set, I feel like the variables are quite interesting. But, I did notice with some of these variables the data tended to be rounded for things such as number of steps. Additionally, we don't know if some of this data was self measured or measured by medical experts. Physical activity level, stress level, daily steps, and quality of sleep can also vary greatly from day to day, along with heart rate and sometimes blood pressure. The data set was not specific on what time of day these variables were recorded or if they were averaged out. The physical activity was also not specified. As an epidemiologist, I had to consider these limitations and came to the conclusion that this data set would likely not be a good candidate for making broader statements about certain things like risk factors and health. It is likely not a good sample size of the normal population of any group we are studying. However, it is still a fine candidate to do analysis and modeling on. With that in mind, I cleaned up the data set and also separated diastolic from systolic blood pressure. 
+
+```{r cleaning code, include=FALSE}
+setwd("~/work/611bios/bios611-final-project")
+library(tidyverse)
+library(rmarkdown)
+library(matlab)
+library(randomForest)
+
+data1 <- read_csv("source_data/sleep_health_and_lifestyle_dataset.csv")
+data1$Systolic_BP <- as.numeric(ifelse(grepl("\\d+/", data1$`Blood Pressure`), sub("\\/.*", "", data1$`Blood Pressure`), NA))
+data1$Diastolic_BP <- as.numeric(ifelse(grepl("\\d+/", data1$`Blood Pressure`), sub(".*\\/", "", data1$`Blood Pressure`), NA))
+data1$`BMI Category` <- ifelse(data1$`BMI Category` == "Normal Weight", "Normal", data1$`BMI Category`)
+character_columns <- sapply(data1, is.character)
+data1[, character_columns] <- lapply(data1[, character_columns], tolower)
+names(data1) <- tolower(names(data1))
+names(data1) <- gsub("\\s+", "_", names(data1))
+data2 <- data1
+```
+# Figures Section
+
+## Figure 1
+Here is my first plot! I decided to create a histogram of the ages in my data set. There is a column for occupation in my data set and it does look like this data set is representative of working professionals. Our ages range from 27-59, which is not representative of a normal population. This confirmed my initial suspicions about this data set not being really representative of a specific population I can think of in public health. We have a lot of people in their 30s and mid 40s here with some more in their early and late 50s. There are very few people under 30 years old in the data set. 
+
+```{r figure 1 age histogram, echo=FALSE}
+ggplot(data2) + geom_histogram(aes(x=age), bins=20) + ggtitle("Histogram of Ages") + ylab("Count") + xlab("Age in Years")
+```
+
+## Figure 2
+Now, I'm going to walk through my second figure. I did something very basic and made a boxplot of sleep duration. I want to see how it looked. It appears that the median amount of sleep in the data set is close to 7.2 hours of sleep a night. This actually seems reasonable considering a lot of people sleep between 6-8 hours every night. It seems that 50% of the data is within 6.4 to 7.8 (roughly) hours of sleep per night. As an athlete, I do know a fair bit about sleep and this isn't great. I guess getting above 7 hours of sleep a night is decent, but it would be good if we saw the median closer to 7.5-8 hours a week. But this is certainly not terrible for a lot of people who appear to be lawyers, doctors, and engineers and are likely pretty busy.
+
+```{r figure 2 sleep duration boxplot, echo=FALSE}
+ggplot(data2) + geom_boxplot(aes(x=sleep_duration)) + ggtitle("Boxplot of Sleep Duration (Hours)") + xlab("Sleep Duration in Hours")
+```
+
+## Figure 3a and 3b
+I decided I wanted to graph both diastolic blood pressure and systolic blood pressure against physical activity level (minutes/day). My guess was that we might see a trend with fewer minutes of physical activity and both a higher diastolic and/or systolic blood pressure. I also knew that this data set had duplicate values so I decided to make the scatter plot have frequency integrated into it by the size of the dots. I couldn't really discern anything from these graphs. With the high values for both blood pressure measurements, people seemed to be doing the most minutes of exercise. Perhaps this is because their doctors told them they needed to exercise to bring their blood pressure back in line. We also just don't have a lot of information on the blood pressure measurements or the level of exercise. Although the graphs not showing any patterns frustrated me a bit, I do realize this is a part of data analysis. There are plenty of times the data is going to show absolutely nothing. 
+```{r figure 3a and 3b diastolic bp vs. phys activity and systolic bp vs. phys activity, echo=FALSE}
+data2$freq <- ave(1:nrow(data2), data2$systolic_bp, data2$physical_activity_level, FUN = length)
+ggplot(data2, aes(x=systolic_bp, y=physical_activity_level)) + geom_point((aes(size = freq))) + xlab("Systolic Blood Pressure") + ylab("Physical Activity Level in Minutes/Day") + ggtitle("Frequency Graph of Systolic Blood Pressure vs. Physical Activity Level in Minutes per Day")
+data2$freq2 <- ave(1:nrow(data2), data2$diastolic_bp, data2$physical_activity_level, FUN = length)
+ggplot(data2, aes(x=diastolic_bp, y=physical_activity_level)) + geom_point((aes(size = freq2))) +
+  xlab("Diastolic Blood Pressure") + ylab("Physical Activity Level in Minutes/Day") + ggtitle("Frequency Graph of Diastolic Blood Pressure vs. Physical Activity Level in Minutes per Day")
+```
+
+## Figure 4
+This figure uses the tile graph to show the relationship between stress level and quality of sleep, which are both discrete variables. I colored the tiles by frequency. There is a very strong relationship that appears between getting worse quality of sleep (smaller numbers) and the stress level being high. When stress levels are low, it seems the quality of sleep is much higher. There is a high frequency of stress level 8 and quality of sleep 6, stress level 5 and quality of sleep 8, and lastly stress level 3 and quality of sleep 9. 
+```{r figure 4 evaluating sleep quality and stress level, echo=FALSE}
+data2$freq3 <- ave(1:nrow(data2), data2$quality_of_sleep, data2$stress_level, FUN = length)
+ggplot(data2, aes(x=quality_of_sleep, y=stress_level, fill=freq3)) + geom_tile() + xlab("Quality of Sleep (1-10 scale)") + ylab("Stress Level (1-10 scale)") + ggtitle("A Tile Graph Assessing Stress Level vs. Quality of Sleep")
+```
+
+## Figure 5 
+My last official figure shows sleep duration by occupation with the counts of average amount of sleep on every bar. I took the average amount of sleep by profession to create this bar chart. Sales representatives have the smallest average sleep per night at 5.9 hours and engineers get the most at 7.99 hours. Some professions also have very few unique entries so we need to be careful here. 
+```{r figure 5 evaluating sleep duration by occupation, echo=FALSE}
+avg_sleep_by_job <- aggregate(sleep_duration ~ occupation, data = data2, FUN = mean)
+ggplot(data2, aes(x = occupation, y = sleep_duration)) +
+  geom_bar(stat = "summary", fun = "mean", fill = "skyblue") +   
+  geom_text(data = avg_sleep_by_job, aes(x = occupation, y = sleep_duration, label = 
+                                           sprintf("%.2f", sleep_duration)),
+            vjust = -0.5, color = "black", size = 3) + 
+  theme(axis.text.x = element_text(angle = 90, vjust = 0.5, hjust=1)) +
+  labs(
+    title = "Average Sleep Duration by Job Profession",
+    x = "Job Profession",
+    y = "Average Sleep Duration (hours)"
+  )
+```
+
+# Analysis Through PCA 
+I used PCA to look at my data and analyze it. First, I hot encoded my categorical variables. Then, I did some graphing and you can see the strange colorful blue chart for evidence and the PCA scatter plot. I realized that hot encoding the variables was actually probably not the best, but I saw no clusters in the first graph. So, I then ran the PCA again. I got another very colorful chart that is not super discernible but it looks like there might be some pattern. I then created multiple scatter plots with the PCA analysis. All of 4 of the graphs do have some level of a pattern. I thought the graphs colored by gender and BMI category potentially followed some of the clusters better than the other graphs, but I'm very new to principle component analysis and there could also not be any patterns here at all. But it would be hard to convince you that the data is outright boring!
+
+```{r pca, echo=FALSE}
+sleep_data_mod <- data1
+sleep_data_mod$gender_numeric <- as.integer(data1$gender == "male")
+sleep_data_mod$bmi_category_numeric <- as.integer(factor(data1$bmi_category, levels = c("normal", "overweight", "obese")))
+occupation_dummies <- model.matrix(~occupation - 1, data = sleep_data_mod)
+colnames(occupation_dummies) <- gsub("occupation", "", colnames(occupation_dummies))
+sleep_data_mod <- cbind(sleep_data_mod, occupation_dummies)
+sleep_disorder_dummies <- model.matrix(~sleep_disorder - 1, data = sleep_data_mod)
+colnames(sleep_disorder_dummies) <- gsub("sleep_disorder", "", colnames(sleep_disorder_dummies))
+sleep_data_mod <- cbind(sleep_data_mod, sleep_disorder_dummies)
+
+#principle component analysis (pca) with one hot encoded variables
+numeric_data_only <- sleep_data_mod[, !names(sleep_data_mod) %in% c("person_id", "gender", "occupation", "bmi_category", "sleep_disorder", "blood_pressure")]
+normalized_data <- scale(numeric_data_only)
+pca_result <- prcomp(normalized_data, center = TRUE, scale. = TRUE)
+imagesc(pca_result$x)
+summary(pca_result)
+
+ggplot(pca_result$x %>% as_tibble() %>% select(PC1, PC2), aes(PC1, PC2)) +
+  geom_point()
+
+#re-trying PCA with only original numeric variables, likely better 
+numeric_data_og <- data1[, !names(data1) %in% c("person_id", "gender", "occupation", "bmi_category", "sleep_disorder", "blood_pressure")]
+normalized_data2 <- scale(numeric_data_og)
+pca_result2 <- prcomp(normalized_data2, center = TRUE, scale. = TRUE)
+imagesc(pca_result2$x)
+summary(pca_result2)
+
+ggplot(pca_result2$x %>% as_tibble() %>% select(PC1, PC2), aes(PC1, PC2)) +
+  geom_point(aes(color=data1$occupation)) + ggtitle("PCA: Colored by Occupation")
+ggplot(pca_result2$x %>% as_tibble() %>% select(PC1, PC2), aes(PC1, PC2)) +
+  geom_point(aes(color=data1$gender)) + ggtitle("PCA: Colored by Gender")
+ggplot(pca_result2$x %>% as_tibble() %>% select(PC1, PC2), aes(PC1, PC2)) +
+  geom_point(aes(color=data1$bmi_category)) + ggtitle("PCA: Colored by BMI Category")
+ggplot(pca_result2$x %>% as_tibble() %>% select(PC1, PC2), aes(PC1, PC2)) +
+  geom_point(aes(color=data1$sleep_disorder)) + ggtitle("PCA: Colored by Sleep Disorder")
+```
+
+# Basic Random Forest Model to Predict Occupations 
+Lastly, I wanted to make a very basic predictive model to see if it could predict the occupation of people in the data set based on all the other variables. It seemed to do okay actually with the Random Forest model employed, but we don't have a lot of data so perhaps I should be cautiously optimistic. But it's cool to see that the PCA may have held something interesting if the predictive model also performed okay by using other variables in the data set.  
+```{r random forest, echo=FALSE}
+set.seed(118)  # for reproducibility
+
+# Define the features and target variable
+features <- c("age", "gender", "sleep_duration", "quality_of_sleep", 
+              "physical_activity_level", "stress_level", "bmi_category", "sleep_disorder",
+              "systolic_bp", "diastolic_bp", "heart_rate", "daily_steps")
+
+target_variable <- "occupation"
+
+# Convert other categorical variables to factors
+data1$gender <- as.factor(data1$gender)
+data1$bmi_category <- as.factor(data1$bmi_category)
+data1$sleep_disorder <- as.factor(data1$sleep_disorder)
+data1$occupation <- as.factor(data1$occupation)
+
+
+# Create a random forest model
+model <- randomForest(formula(paste(target_variable, "~", paste(features, collapse = "+"))),
+                      data = data1)
+
+# Print the model summary (optional)
+print(model)
+```
+
+# Conclusion
+This was an instructive exercise on going through data and using the tools I used all semester long. My future questions would be to see if my predictive model and principle component analysis would generate similar results on a bigger data set. I would love to see how my results here stack up against a larger data set and also from a more defined population. I feel like my results here are limited by the fact that I don't know where this survey was done and not sure how everything was measured. I would need better objective measurements and to know how each variable was taken/recorded, along with a more defined population (a sample of working people, a subset of the U.S. population, etc). I think it would be very cool to also add measurements about hypertension, heart disease, and other variables related to health. I also simply did not have the time in this to do all the analysis I wanted or envisioned, but it gives me good ideas for the future.  
